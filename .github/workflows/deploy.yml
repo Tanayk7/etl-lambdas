@@ -1,0 +1,78 @@
+name: Deploy Lambda Functions
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  AWS_REGION: ap-south-1
+  LAMBDA_ROLE_ARN: arn:aws:iam::730335202638:role/ETL-Lambdas-Role
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        lambda:
+          - name: data-processor
+            dockerfile_path: ./data-processor/Dockerfile
+            folder: ./data-processor
+            ECR_REPOSITORY: data-processor
+
+          - name: data-splitter
+            dockerfile_path: ./data-splitter/Dockerfile
+            folder: ./data-splitter
+            ECR_REPOSITORY: data-splitter
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@62f4f872db3836360b72999f4b87f1ff13310f3a
+
+      - name: Build, Tag, and Push Docker Image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd ${{ matrix.lambda.folder }}
+          docker build -t $ECR_REGISTRY/${{matrix.lambda.ECR_REPOSITORY}}:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/${{matrix.lambda.ECR_REPOSITORY}}:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/${{matrix.lambda.ECR_REPOSITORY}}:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+      - name: Deploy Lambda Function
+        run: |
+          set +e
+          aws lambda get-function --function-name ${{ matrix.lambda.name }} --region ${{env.AWS_REGION}} > /dev/null 2>&1
+          EXISTS=$?
+          set -e
+
+          if [ $EXISTS -eq 0 ]; then
+            echo "Lambda function exists. Updating function code..."
+            aws lambda update-function-code \
+              --function-name ${{ matrix.lambda.name }} \
+              --image-uri ${{ steps.build-image.outputs.image }} \
+              --region ${{env.AWS_REGION}}
+          else
+            echo "Lambda function does not exist. Creating a new function..."
+            aws lambda create-function \
+              --function-name ${{ matrix.lambda.name }} \
+              --package-type Image \
+              --code ImageUri=${{ steps.build-image.outputs.image }} \
+              --role ${{ env.LAMBDA_ROLE_ARN }} \
+              --memory-size 3008 \
+              --ephemeral-storage "{\"Size\": 10240}" \
+              --timeout 300 \
+              --region ${{env.AWS_REGION}}
+          fi

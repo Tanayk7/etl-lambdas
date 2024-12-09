@@ -1,0 +1,5 @@
+boto
+requests
+Flask
+pandas
+python-dotenv

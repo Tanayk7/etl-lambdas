@@ -1,0 +1,6 @@
+boto
+requests
+Flask
+pandas
+SQLAlchemy
+python-dotenv
