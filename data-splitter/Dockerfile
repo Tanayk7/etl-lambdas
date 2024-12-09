@@ -17,8 +17,6 @@ RUN pip install --upgrade pip
 RUN python -m pip install psycopg2-binary>=2.9.1
 RUN pip install -r requirements.txt
 
-ADD .aws ${LAMBDA_TASK_ROOT}
-
 # Copy function code
 COPY index.py ${LAMBDA_TASK_ROOT}
 COPY data_processing.py ${LAMBDA_TASK_ROOT}
