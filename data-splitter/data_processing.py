@@ -95,7 +95,7 @@ class DataProcessor:
             print("Error occurred!: ", e)
             raise
     
-    def save_all_to_db(self, all_chunks, batch_size=100000):
+    def save_all_to_db(self, all_chunks, batch_size=50000):
         """
         Save all processed chunks to the database using COPY for bulk insertion.
         Args:
@@ -140,6 +140,8 @@ class DataProcessor:
            
                 cursor.copy_from(output, 'trips', sep='\t', null="")
                 connection.commit()
+                print("Wrote batch successfully!")
+                
             print("All batches inserted successfully!")
         except Exception as e:
             self.session.rollback()
